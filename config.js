@@ -10,7 +10,11 @@ const ABI = require("./contractABI.json"); // Smart contract ABI
 // Connect to Ethereum
 const web3 = new Web3(new Web3.providers.HttpProvider(INFURA_URL));
 const contract = new web3.eth.Contract(ABI, CONTRACT_ADDRESS);
-const wallet = web3.eth.accounts.wallet.add(PRIVATE_KEY);
+const tx = await contract.methods.mintTicket(price).send({
+    from: wallet.address, // instead of wallet[0].address
+    gas: 500000,
+  });
+  
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
