@@ -38,5 +38,6 @@ const deploy = async () => {
     console.error("Deployment failed:", error);
   }
 };
+ 
 
 deploy();
