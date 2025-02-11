@@ -1,11 +1,15 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-const TicketSchema = new mongoose.Schema({
-    tokenId: { type: Number, required: true, unique: true },
+const TicketSchema = new Schema(
+  {
+    ticketId: { type: Number, required: true, unique: true },
     owner: { type: String, required: true },
-    price: { type: String, required: true },
-    forSale: { type: Boolean, default: false },
-    event: { type: mongoose.Schema.Types.ObjectId, ref: "Event" }
-});
+    basePrice: { type: String, required: true }, // stored in Wei (as a string)
+    validated: { type: Boolean, default: false },
+    salePrice: { type: String, default: "0" }      // "0" means not for sale
+  },
+  { timestamps: true }
+);
 
-module.exports = mongoose.model("Ticket", TicketSchema);
+module.exports = mongoose.model('Ticket', TicketSchema);

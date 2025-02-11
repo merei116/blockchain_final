@@ -13,7 +13,7 @@ const contractArtifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
 const { abi } = contractArtifact;
 
 // Replace this with the actual deployed contract address from deploy.js
-const contractAddress = '0x4cbCEFe3d1b1A2e928A6dEFc1A877F9048d5C1F3';
+const contractAddress = '0xeEef7c5Ba150DDE6a05445Bb1c79cEca9514C88d';
 
 // Create a contract instance using the ABI and deployed address
 const contract = new web3.eth.Contract(abi, contractAddress);
