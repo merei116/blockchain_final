@@ -5,9 +5,9 @@ const TicketSchema = new Schema(
   {
     ticketId: { type: Number, required: true, unique: true },
     owner: { type: String, required: true },
-    basePrice: { type: String, required: true }, // stored in Wei (as a string)
-    validated: { type: Boolean, default: false },
-    salePrice: { type: String, default: "0" }      // "0" means not for sale
+    basePrice: { type: String, required: true }, // stored in Wei as a string
+    tokenURI: { type: String, required: true },
+    validated: { type: Boolean, default: false }
   },
   { timestamps: true }
 );

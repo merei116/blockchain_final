@@ -1,4 +1,4 @@
-// interaction.js
+// interact.js
 
 const Web3 = require('web3').default;
 const fs = require('fs');
@@ -12,8 +12,8 @@ const artifactPath = path.resolve(__dirname, 'build', 'TicketNFT.json');
 const contractArtifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
 const { abi } = contractArtifact;
 
-// Replace this with the actual deployed contract address from deploy.js
-const contractAddress = '0xeEef7c5Ba150DDE6a05445Bb1c79cEca9514C88d';
+// Use the deployed contract address from your deploy output:
+const contractAddress = '0xceB62dD18c054E545901eEa52337ac6e098Fd16C';
 
 // Create a contract instance using the ABI and deployed address
 const contract = new web3.eth.Contract(abi, contractAddress);
@@ -22,81 +22,59 @@ const interact = async () => {
   try {
     // Retrieve accounts provided by Ganache
     const accounts = await web3.eth.getAccounts();
-    const owner = accounts[0]; // Contract owner (used for minting)
-    const user = accounts[1];  // Ticket recipient (initial ticket owner)
-    const buyer = accounts[2]; // Buyer for the resale ticket
+    const owner = accounts[0];  // Contract owner
+    const user = accounts[1];   // Ticket recipient for minting
+    const buyer = accounts[2];  // Buyer using the buyTicket function
 
     console.log("Using accounts:");
     console.log("  Owner:", owner);
-    console.log("  User (ticket recipient):", user);
-    console.log("  Buyer (resale purchaser):", buyer);
+    console.log("  User (recipient):", user);
+    console.log("  Buyer:", buyer);
 
     // ------------------------------------------------------------------------
-    // Step 1: Mint a Ticket
+    // Step 1: Mint a Ticket (by owner) for the designated user.
     // ------------------------------------------------------------------------
-    // Ticket base price: 0.1 Ether
     const basePrice = web3.utils.toWei('0.1', 'ether');
-    console.log(`Minting a ticket for ${user} with base price ${basePrice} wei...`);
-    await contract.methods.mintTicket(user, basePrice).send({
+    const tokenURI1 = "ipfs://ticket-metadata-0";
+    console.log(`Minting a ticket for ${user} with base price ${basePrice} wei and tokenURI: ${tokenURI1}...`);
+    const txMint = await contract.methods.mintTicket(user, basePrice, tokenURI1).send({
       from: owner,
       gas: 500000
     });
-    console.log("Ticket minted with tokenId: 0");
+    console.log("Ticket minted. Transaction receipt:", txMint);
 
     // ------------------------------------------------------------------------
-    // Step 2: List the Ticket for Sale
+    // Step 2: Buy a Ticket (by a buyer) using the buyTicket function.
     // ------------------------------------------------------------------------
-    // Listing sale price: 0.2 Ether
-    const salePrice1 = web3.utils.toWei('0.2', 'ether');
-    console.log(`Listing ticket (tokenId 0) for sale at ${salePrice1} wei by ${user}...`);
-    await contract.methods.listTicketForSale(0, salePrice1).send({
-      from: user,
-      gas: 500000
-    });
-    console.log("Ticket listed for sale at price:", salePrice1);
-
-    // ------------------------------------------------------------------------
-    // Step 3: Cancel the Sale Listing
-    // ------------------------------------------------------------------------
-    console.log(`Cancelling ticket sale listing (tokenId 0) by ${user}...`);
-    await contract.methods.cancelTicketSale(0).send({
-      from: user,
-      gas: 500000
-    });
-    console.log("Ticket sale listing cancelled.");
-
-    // ------------------------------------------------------------------------
-    // Step 4: Re-list the Ticket for Sale at a New Price
-    // ------------------------------------------------------------------------
-    // New sale price: 0.3 Ether
-    const salePrice2 = web3.utils.toWei('0.3', 'ether');
-    console.log(`Re-listing ticket (tokenId 0) for sale at ${salePrice2} wei by ${user}...`);
-    await contract.methods.listTicketForSale(0, salePrice2).send({
-      from: user,
-      gas: 500000
-    });
-    console.log("Ticket re-listed for sale at price:", salePrice2);
-
-    // ------------------------------------------------------------------------
-    // Step 5: Purchase the Ticket
-    // ------------------------------------------------------------------------
-    console.log(`Buyer ${buyer} is attempting to purchase ticket (tokenId 0) for ${salePrice2} wei...`);
-    await contract.methods.purchaseTicket(0).send({
+    const tokenURI2 = "ipfs://ticket-metadata-1";
+    const purchasePrice = web3.utils.toWei('0.2', 'ether');
+    console.log(`Buyer ${buyer} is buying a ticket with price ${purchasePrice} wei and tokenURI: ${tokenURI2}...`);
+    const txBuy = await contract.methods.buyTicket(tokenURI2).send({
       from: buyer,
       gas: 500000,
-      value: salePrice2
+      value: purchasePrice
     });
-    console.log("Ticket purchased by:", buyer);
+    console.log("Ticket bought. Transaction receipt:", txBuy);
 
     // ------------------------------------------------------------------------
-    // Step 6: Validate the Ticket
+    // Step 3: Validate a Ticket (by owner).
     // ------------------------------------------------------------------------
-    console.log(`New owner (${buyer}) validating ticket (tokenId 0)...`);
-    await contract.methods.validateTicket(0).send({
-      from: buyer,
+    console.log(`Owner ${owner} is validating ticket with tokenId 0...`);
+    const txValidate = await contract.methods.validateTicket(0).send({
+      from: owner,
       gas: 500000
     });
-    console.log("Ticket validated by:", buyer);
+    console.log("Ticket validated. Transaction receipt:", txValidate);
+
+    // ------------------------------------------------------------------------
+    // Step 4: Withdraw the contract balance (by owner).
+    // ------------------------------------------------------------------------
+    console.log(`Owner ${owner} is withdrawing the contract balance...`);
+    const txWithdraw = await contract.methods.withdraw().send({
+      from: owner,
+      gas: 500000
+    });
+    console.log("Withdrawal transaction receipt:", txWithdraw);
 
   } catch (error) {
     console.error("Interaction failed:", error);

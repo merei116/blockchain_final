@@ -8,7 +8,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
-const Web3 = require('web3').default; // Use .default if needed
+const Web3 = require('web3').default;
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -46,149 +46,127 @@ web3.eth.getAccounts()
 // --- Utility: Convert Ether to Wei ---
 const toWei = (amount) => web3.utils.toWei(amount.toString(), 'ether');
 
+function bigIntReplacer(key, value) {
+  return typeof value === 'bigint' ? value.toString() : value;
+}
+
 /**
  * API Endpoint: Mint Ticket
  * - Only the admin (contract owner) can mint tickets.
- * - Request Body: { to: "recipient_address", price: "ticket price in Ether" }
+ * - Request Body: { to: "recipient_address", price: "ticket price in Ether", tokenURI: "token URI" }
  */
 app.post('/mintTicket', async (req, res) => {
   try {
-    const { to, price } = req.body;
-    if (!to || !price) {
-      return res.status(400).json({ error: "Missing 'to' or 'price'" });
+    const { to, price, tokenURI } = req.body;
+    if (!to || !price || !tokenURI) {
+      return res.status(400).json({ error: "Missing 'to', 'price' or 'tokenURI'" });
     }
     const priceWei = web3.utils.toWei(price.toString(), 'ether');
 
-    const tx = await contract.methods.mintTicket(to, priceWei).send({
+    const tx = await contract.methods.mintTicket(to, priceWei, tokenURI).send({
       from: adminAccount,
       gas: 5000000,
       gasPrice: '20000000000'
     });
 
-    // Convert BigInt to Number before saving to MongoDB
+    // Extract tokenId from TicketMinted event
     let ticketId;
     if (tx.events && tx.events.TicketMinted) {
       ticketId = Number(tx.events.TicketMinted.returnValues.tokenId);
     } else {
-      console.error("🚨 No TicketMinted event found in transaction response:", tx);
+      console.error("No TicketMinted event found in transaction response:", tx);
       return res.status(500).json({ error: "Minting successful, but event data is missing." });
     }
 
     // Save ticket data to MongoDB
     const newTicket = new Ticket({
-      ticketId, // Stored as a Number
+      ticketId,
       owner: to,
-      basePrice: priceWei.toString(), // Convert price to string to avoid BigInt issues
-      validated: false,
-      salePrice: "0"
+      basePrice: priceWei.toString(),
+      tokenURI,
+      validated: false
     });
     await newTicket.save();
 
-    // Convert all BigInt values to strings before sending response
     res.json({
-      message: "✅ Ticket minted successfully",
+      message: "Ticket minted successfully",
       ticket: {
-        ticketId: ticketId.toString(), // Ensure ticketId is a string
+        ticketId: ticketId.toString(),
         owner: to,
-        basePrice: priceWei.toString(), // Convert BigInt to string
-        validated: false,
-        salePrice: "0"
+        basePrice: priceWei.toString(),
+        tokenURI,
+        validated: false
       },
       transaction: {
-        ...tx,
-        gasUsed: tx.gasUsed.toString(), // Convert gasUsed to string
-        blockNumber: tx.blockNumber.toString(), // Convert blockNumber to string
+        gasUsed: tx.gasUsed.toString(),
+        blockNumber: tx.blockNumber.toString()
       }
     });
-
   } catch (error) {
-    console.error("❌ Mint Ticket Error:", error);
-    res.status(500).json({ error: error.toString() });
-  }
-});
-
-
-/**
- * API Endpoint: List Ticket For Sale
- * - Request Body: { ticketId: number, salePrice: "price in Ether", owner: "ticket owner's address" }
- */
-app.post('/listTicketForSale', async (req, res) => {
-  try {
-    const { ticketId, salePrice, owner } = req.body;
-    if (ticketId === undefined || !salePrice || !owner) {
-      return res.status(400).json({ error: "Missing ticketId, salePrice, or owner" });
-    }
-    const salePriceWei = toWei(salePrice);
-    const tx = await contract.methods.listTicketForSale(ticketId, salePriceWei).send({
-      from: owner,
-      gas: 5000000,
-      gasPrice: '20000000000'
-    });
-    // Update the ticket document in the database
-    await Ticket.findOneAndUpdate({ ticketId }, { salePrice: salePriceWei });
-    res.json({ message: "Ticket listed for sale", transaction: tx });
-  } catch (error) {
-    console.error("List Ticket For Sale Error:", error);
+    console.error("Mint Ticket Error:", error);
     res.status(500).json({ error: error.toString() });
   }
 });
 
 /**
- * API Endpoint: Cancel Ticket Sale
- * - Request Body: { ticketId: number, owner: "ticket owner's address" }
+ * API Endpoint: Buy Ticket
+ * - Allows any user to buy a ticket using the buyTicket function.
+ * - Request Body: { tokenURI: "token URI", buyer: "buyer address", value: "price in Ether" }
  */
-app.post('/cancelTicketSale', async (req, res) => {
+app.post('/buyTicket', async (req, res) => {
   try {
-    const { ticketId, owner } = req.body;
-    if (ticketId === undefined || !owner) {
-      return res.status(400).json({ error: "Missing ticketId or owner" });
+    const { tokenURI, buyer, value } = req.body;
+    if (!tokenURI || !buyer || !value) {
+      return res.status(400).json({ error: "Missing 'tokenURI', 'buyer' or 'value'" });
     }
-    const tx = await contract.methods.cancelTicketSale(ticketId).send({
-      from: owner,
-      gas: 5000000,
-      gasPrice: '20000000000'
-    });
-    // Update the ticket in the database (set salePrice back to "0")
-    await Ticket.findOneAndUpdate({ ticketId }, { salePrice: "0" });
-    res.json({ message: "Ticket sale cancelled", transaction: tx });
-  } catch (error) {
-    console.error("Cancel Ticket Sale Error:", error);
-    res.status(500).json({ error: error.toString() });
-  }
-});
-
-/**
- * API Endpoint: Purchase Ticket
- * - Request Body: { ticketId: number, buyer: "buyer address" }
- */
-app.post('/purchaseTicket', async (req, res) => {
-  try {
-    const { ticketId, buyer } = req.body;
-    if (ticketId === undefined || !buyer) {
-      return res.status(400).json({ error: "Missing ticketId or buyer" });
-    }
-    // Get the sale price from the contract
-    const salePriceWei = await contract.methods.ticketSalePrice(ticketId).call();
-    if (salePriceWei == 0) {
-      return res.status(400).json({ error: "Ticket is not listed for sale" });
-    }
-    const tx = await contract.methods.purchaseTicket(ticketId).send({
+    const valueWei = web3.utils.toWei(value.toString(), 'ether');
+    const tx = await contract.methods.buyTicket(tokenURI).send({
       from: buyer,
       gas: 5000000,
       gasPrice: '20000000000',
-      value: salePriceWei
+      value: valueWei
     });
-    // Update the ticket in the database: change owner and reset salePrice
-    await Ticket.findOneAndUpdate({ ticketId }, { owner: buyer, salePrice: "0" });
-    res.json({ message: "Ticket purchased", transaction: tx });
+    // Extract tokenId from TicketMinted event
+    let ticketId;
+    if (tx.events && tx.events.TicketMinted) {
+      ticketId = Number(tx.events.TicketMinted.returnValues.tokenId);
+    } else {
+      console.error("No TicketMinted event found in transaction response:", tx);
+      return res.status(500).json({ error: "Ticket purchase successful, but event data is missing." });
+    }
+    // Save ticket data to MongoDB
+    const newTicket = new Ticket({
+      ticketId,
+      owner: buyer,
+      basePrice: valueWei.toString(),
+      tokenURI,
+      validated: false
+    });
+    await newTicket.save();
+
+    res.json({
+      message: "Ticket purchased successfully",
+      ticket: {
+        ticketId: ticketId.toString(),
+        owner: buyer,
+        basePrice: valueWei.toString(),
+        tokenURI,
+        validated: false
+      },
+      transaction: {
+        gasUsed: tx.gasUsed.toString(),
+        blockNumber: tx.blockNumber.toString()
+      }
+    });
   } catch (error) {
-    console.error("Purchase Ticket Error:", error);
+    console.error("Buy Ticket Error:", error);
     res.status(500).json({ error: error.toString() });
   }
 });
 
 /**
  * API Endpoint: Validate Ticket
+ * - Only the owner can validate a ticket.
  * - Request Body: { ticketId: number, owner: "ticket owner's address" }
  */
 app.post('/validateTicket', async (req, res) => {
@@ -202,14 +180,19 @@ app.post('/validateTicket', async (req, res) => {
       gas: 5000000,
       gasPrice: '20000000000'
     });
-    // Mark the ticket as validated in the database
+    // Update the ticket document in the database (set validated to true)
     await Ticket.findOneAndUpdate({ ticketId }, { validated: true });
-    res.json({ message: "Ticket validated", transaction: tx });
+    
+    // Convert any BigInt values to strings before sending the response
+    const safeTx = JSON.parse(JSON.stringify(tx, bigIntReplacer));
+    
+    res.json({ message: "Ticket validated", transaction: safeTx });
   } catch (error) {
     console.error("Validate Ticket Error:", error);
     res.status(500).json({ error: error.toString() });
   }
 });
+
 
 /**
  * API Endpoint: Get All Tickets (from the database)

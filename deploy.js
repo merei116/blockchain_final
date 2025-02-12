@@ -1,6 +1,5 @@
 // deploy.js
 
-// Use the default export from web3 (CommonJS)
 const Web3 = require('web3').default;
 const fs = require('fs');
 const path = require('path');
@@ -23,7 +22,6 @@ const deploy = async () => {
     const contractInstance = new web3.eth.Contract(abi);
 
     // Deploy the contract with constructor arguments.
-    // Note: We explicitly set a legacy gasPrice to avoid EIP-1559 issues.
     const deployedContract = await contractInstance.deploy({
       data: bytecode,
       arguments: ["EventTicket", "ETKT"]
@@ -38,6 +36,5 @@ const deploy = async () => {
     console.error("Deployment failed:", error);
   }
 };
- 
 
 deploy();
